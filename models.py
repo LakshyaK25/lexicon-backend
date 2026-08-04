@@ -2,8 +2,6 @@ import requests
 import os
 import joblib
 import numpy as np
-import torch
-from transformers import RobertaTokenizer, RobertaForSequenceClassification
 
 # RoBERTa via HuggingFace API
 HF_MODEL = "Kanjani25/roberta-fakenews" 
