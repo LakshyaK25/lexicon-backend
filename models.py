@@ -4,11 +4,11 @@ import joblib
 import numpy as np
 
 # RoBERTa via HuggingFace API
-HF_MODEL = "Kanjani25/roberta-fakenews" 
+HF_MODEL = "Kanjani25/roberta-fakenews"  # ← your username
 HF_TOKEN = os.environ.get("HF_TOKEN")
 API_URL  = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
-# SVM + Logistic paths (loaded locally — files are tiny)
+# Local model paths
 SVM_PATH      = "svm_model.joblib"
 LOGISTIC_PATH = "logistic_model.joblib"
 TFIDF_PATH    = "tfidf_vectorizer.joblib"
@@ -23,7 +23,6 @@ def load_models():
     global svm_model, logistic_model, tfidf_vectorizer
     status = {"roberta": False, "svm": False, "logistic": False}
 
-    # Load SVM + TF-IDF
     try:
         tfidf_vectorizer = joblib.load(TFIDF_PATH)
         svm_model        = joblib.load(SVM_PATH)
@@ -32,15 +31,13 @@ def load_models():
     except Exception as e:
         print(f"⚠️  SVM not loaded: {e}")
 
-    # Load Logistic Regression
     try:
-        logistic_model      = joblib.load(LOGISTIC_PATH)
-        status["logistic"]  = True
+        logistic_model     = joblib.load(LOGISTIC_PATH)
+        status["logistic"] = True
         print("✅ Logistic Regression loaded")
     except Exception as e:
         print(f"⚠️  Logistic not loaded: {e}")
 
-    # RoBERTa — via HF API (no local loading needed)
     if HF_TOKEN:
         status["roberta"] = True
         print("✅ RoBERTa API ready")
