@@ -1,26 +1,27 @@
-import requests
 import os
 import joblib
 import numpy as np
+import torch
+from transformers import RobertaTokenizer, RobertaForSequenceClassification
 
-# RoBERTa via HuggingFace API
+# Model loads from HF Hub once at startup, runs locally after that
 HF_MODEL = "Kanjani25/roberta-fakenews"  # ← your username
-HF_TOKEN = os.environ.get("HF_TOKEN")
-API_URL  = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
-# Local model paths
 SVM_PATH      = "svm_model.joblib"
 LOGISTIC_PATH = "logistic_model.joblib"
 TFIDF_PATH    = "tfidf_vectorizer.joblib"
 
-# Global holders
 svm_model        = None
 logistic_model   = None
 tfidf_vectorizer = None
+roberta_model    = None
+roberta_tokenizer = None
+device           = torch.device("cpu")
 
 
 def load_models():
     global svm_model, logistic_model, tfidf_vectorizer
+    global roberta_model, roberta_tokenizer
     status = {"roberta": False, "svm": False, "logistic": False}
 
     try:
@@ -38,30 +39,42 @@ def load_models():
     except Exception as e:
         print(f"⚠️  Logistic not loaded: {e}")
 
-    if HF_TOKEN:
+    try:
+        print("Downloading RoBERTa from HuggingFace Hub...")
+        roberta_tokenizer = RobertaTokenizer.from_pretrained(HF_MODEL)
+        roberta_model     = RobertaForSequenceClassification.from_pretrained(HF_MODEL)
+        roberta_model.to(device)
+        roberta_model.eval()
         status["roberta"] = True
-        print("✅ RoBERTa API ready")
-    else:
-        print("⚠️  HF_TOKEN not set — RoBERTa unavailable")
+        print("✅ RoBERTa loaded locally")
+    except Exception as e:
+        print(f"⚠️  RoBERTa not loaded: {e}")
 
     return status
 
 
 def predict_roberta(text: str) -> dict:
-    headers  = {"Authorization": f"Bearer {HF_TOKEN}"}
-    response = requests.post(API_URL, headers=headers, json={"inputs": text})
+    if roberta_model is None:
+        raise ValueError("RoBERTa model not loaded")
 
-    if response.status_code != 200:
-        raise ValueError(f"HF API error: {response.text}")
+    inputs = roberta_tokenizer(
+        text,
+        return_tensors="pt",
+        max_length=256,
+        truncation=True,
+        padding="max_length"
+    )
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    result = response.json()
-    top    = max(result[0], key=lambda x: x["score"])
-    label  = top["label"]
-    score  = top["score"]
+    with torch.no_grad():
+        outputs    = roberta_model(**inputs)
+        probs      = torch.softmax(outputs.logits, dim=1)[0]
+        pred_label = torch.argmax(probs).item()
+        confidence = probs[pred_label].item()
 
     return {
-        "verdict":    "FAKE" if label == "LABEL_1" else "REAL",
-        "confidence": round(score, 4),
+        "verdict":    "FAKE" if pred_label == 1 else "REAL",
+        "confidence": round(confidence, 4),
         "model":      "RoBERTa Base"
     }
 
